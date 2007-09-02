@@ -1,7 +1,5 @@
 #!/usr/bin/python
-# getargs uygula buraya boylece bu bet'k zamanla wu betigi halkine gelebilir
-
-
+# TODO: implement getopt.
 import sqlite
 import sys
 
@@ -30,7 +28,8 @@ if len(sys.argv)==5 and sys.argv[1]=="add":
 	c.execute('select max(id) as ver from contents')
 	nextid = int(1 + c.fetchone().ver)
 	# sys.argv = add content, type, parent
-	text= 'INSERT INTO "contents" (id, contentid, content, label, type, parent, startver, createdate) VALUES (%s ,%s , "%s" ,"" ,"%s" ,%s , %s, "20070818100000" )'% (nextid, nextid, sys.argv[2], sys.argv[3], sys.argv[4], nextid)
+	text= 'INSERT INTO "contents" (id, contentid, content, label, type, parent, startver, createdate) VALUES (%s ,%s , "%s" ,"" ,"%s" ,%s , %s, "20070818100000" )'%
+		(nextid, nextid, sys.argv[2], sys.argv[3], sys.argv[4], nextid)
 	print text
 	c.execute(text)
 elif len(sys.argv)==2 and sys.argv[1]=="tree":
