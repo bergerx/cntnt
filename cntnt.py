@@ -1,81 +1,109 @@
 #!/usr/bin/python
 import sqlite
-import sys, getopt
+import sys
 
+class cntnt:
+	# TODO: Add parameter check
+	def __init__(self, dbfile):
+		self.conn = sqlite.connect(dbfile)
+		self.c = self.conn.cursor()
 
-def usage():
-	print """Usage:
-"""
+	def commit(self):
+		self.conn.commit()
 
-def connect():
-	conn = sqlite.connect('/home/bekir/test/python/hede.db')
-	c = conn.cursor()
-	return conn, c
+	def revert(self):
+		self.conn.revert()
+
+	def read(self, id):
+		try:
+			self.c.execute("select * from contents where id=%s"%id)
+			result = self.c.fetchone()
+			self.commit()
+		except:
+			result = False
+			self.revert()
+		return result
+
+	def readChilds(self, id):
+		try:
+			self.c.execute("select * from contents where parent=%s"% (id))
+		except:
+			return False
+		result = []
+		childs = self.c.fetchall()
+		for child in childs:
+			result.append(self.read(child.id))
+		return result or False
+
 # Create table
 #c.execute('''CREATE TABLE "contents" (id INTEGER NOT NULL PRIMARY KEY UNIQUE, contentid INTEGER NOT NULL, content VARCHAR, label VARCHAR, type VARCHAR, parent INTEGER NOT NULL, startver INTEGER NOT NULL, endver INTEGER, createdate VARCHAR NOT NULL, deletedate VARCHAR);''')
 # Insert a row of data
 # c.execute('''INSERT INTO "contents" (id, contentid, content, label, type, parent, startver, endver, createdate, deletedate) VALUES ( , , , , , , , , , )''')
 # Insert root record
 # c.execute('''INSERT INTO "contents" (id, contentid, content, label, type, parent, startver, createdate) VALUES (0 ,0 ,"root" ,"root" ,"content" ,0 , 0, "20070818100000" )''')
+	def create(self, content="", type="", parent=0, label=""):
+		#TODO: add label uniqer
+		self.c.execute('select max(id) as ver from contents')
+		nextid = int(1 + self.c.fetchone().ver)
+		sql = 'INSERT INTO "contents" (id, contentid, content, label, type, parent, startver, createdate) VALUES (%s ,%s , "%s" ,"%s" ,"%s" ,%s , %s, "20070818100000" )'
+		sql = sql % (nextid, nextid, content, label, type, parent, nextid)
+		self.c.execute(sql)
+		id = self.c.lastrowid
+		return self.read(id)
 
-def disconnect(conn):
-	conn.commit()
+	def delete(self, id):
+		if not self.read(id):
+			return None
+		self.c.execute('select id from contents where parent = %s' % id)
+		childs = self.c.fetchall()
+		if len(childs)!=0:
+			# Content has childs. Not deleted.
+			return False
+		sql = 'delete from contents where id = %s' % (id)
+		self.c.execute(sql)
+		self.commit()
+		return id
 
-def tree(c, id=0, level=0):
-	try:
-		c.execute("select * from contents where parent=%s"% (id))
-	except:
-		print "Content has no childs"
-	all=c.fetchall()
-	for i in all:
-		print "%4d %s%s(%s)"%(i.id, " "*level*4, i.content, i.type)
-		tree(c, i.id, level+1)
+	def deepDelete(self, id):
+		self.c.execute('select id from contents where parent = %s' % (id))
+		childs = self.c.fetchall()
+		ids = []
+		for child in childs:
+			child_ids = self.deepDelete(child.id)
+			ids.extend(child_ids)
+		else:
+			id = self.delete(id)
+			if id:
+				ids.append(id)
+		if not ids:
+			result = False
+		else:
+			result = ids
+		return result
 
-def view(c, id=None):
-	if id == None:
-		c.execute("select * from contents")
-	else:
-		c.execute("select * from contents where id=%s"%id)
-	all=c.fetchall()
+# here after there is only command line functions
+def tree(cnt, id=0, level=0):
+	childs = cnt.readChilds(id)
+	if not childs:
+		return False
+	for child in childs:
+		print "%4d %s%s(%s)"%(child.id, " "*level*4, child.content, child.type)
+		tree(cnt, child.id, level+1)
+
+def view(cnt, id=None):
+	#TODO: Show all records - MASSIVE FUNCTION
+	all=[]
 	for i in all:
 		print "%4d %4d %s %s(%s)"%(i.id, i.parent, i.label, i.content, i.type)
 
-def read(c, id):
-	try:
-		c.execute("select * from contents where id=%s"%id)
-		return c.fetchone()
-	except:
-		return False
 
-def create(c, content="", type="", parent=0, label=""):
-	# TODO: Add parameter check
-	c.execute('select max(id) as ver from contents')
-	nextid = int(1 + c.fetchone().ver)
-	sql = 'INSERT INTO "contents" (id, contentid, content, label, type, parent, startver, createdate) VALUES (%s ,%s , "%s" ,"%s" ,"%s" ,%s , %s, "20070818100000" )'
-	sql = sql % (nextid, nextid, content, label, type, parent, nextid)
-	#print sql
-	c.execute(sql)
-	id = c.lastrowid
-	return read(c, id)
-
-def delete(c, id):
-	c.execute('select id from contents where parent = %s' % id)
-	childs = c.fetchall()
-	if len(childs)!=0:
-		print "Content has childs. Not deleted. Try -D parameter.%s"%len(childs)
-		sys.exit(1)
-	sql = 'delete from contents where id = %s' % (id)
-	c.execute(sql)
-
-def deepDelete(c, id):
-	c.execute('select id from contents where parent = %s' % (id))
-	childs = c.fetchall()
-	for child in childs:
-		deepDelete(c, child.id)
-	else:
-		delete(c, id)
+def usage():
+	print """Usage:
+"""
 
 def main():
+	import getopt
+	cnt = cntnt('/home/bekir/test/python/hede.db')
 	try:
 		opts, args = getopt.getopt(sys.argv[1:], "ho:crudDt", ["help", "output=", "id=", "content=", "label=", "type=", "parent="])
 	except getopt.GetoptError:
@@ -118,30 +146,24 @@ def main():
 		if o == "--parent":
 			parent = a
 
-	print """no error"""
-
-	conn, c = connect()
-
 	if crud == "create":
 		if None in (content, type, parent):
 			print "You must supply --content, --type and --parent"
 			sys.exit(0)
-		create(c, content, type, parent, label)
+		return cnt.create(content, type, parent, label)
 	elif crud == "read":
-		view(c, id)
+		view(cnt, id)
 	elif crud == "tree":
 		if id == None: id=0
-		tree(c, id)
+		tree(cnt, id)
 	elif crud == "update":
 		pass
 	elif crud == "delete":
-		delete(c, id)
+		return cnt.delete(id)
 	elif crud == "deepdelete":
-		deepDelete(c, id)
+		return cnt.deepDelete(id)
 	else:
 		usage()
-
-	disconnect(conn)
 	sys.exit(0)
 
 if __name__=="__main__":
