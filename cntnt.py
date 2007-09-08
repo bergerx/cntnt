@@ -113,12 +113,6 @@ def tree(cnt, id=0, level=0):
 		print "%4d %s%s(%s)"%(child["id"], " "*level*4, child["content"], child["type"])
 		tree(cnt, child["id"], level+1)
 
-def view(cnt, id=None):
-	# TODO: Show all records - MASSIVE FUNCTION
-	i=cnt.read(id)
-	print "%4d %4d %s %s(%s)"%(i["id"], i["parent"], i["label"], i["content"], i["type"])
-
-
 def usage():
 	print """Usage:
 """
@@ -174,7 +168,7 @@ def main():
 			sys.exit(0)
 		print cnt.create(content, type, parent, label)
 	elif crud == "read":
-		view(cnt, id)
+		print cnt.read(id)
 	elif crud == "tree":
 		if id == None: id=0
 		tree(cnt, id)
