@@ -110,7 +110,12 @@ class cntnt:
 def tree(cnt, id=0, level=0):
 	childs = cnt.readChilds(id)
 	for child in childs:
-		print "%4d %s%s(%s)"%(child["id"], " "*level*4, child["content"], child["type"])
+		output = "%4d %s" % (child["id"], " "*level*4)
+		output += child["content"]
+		if child["label"]:
+			output += "[%s]" % child["label"]
+		output += "(%s)" % child["type"]
+		print output
 		tree(cnt, child["id"], level+1)
 
 def usage():
