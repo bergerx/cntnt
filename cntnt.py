@@ -8,7 +8,6 @@ class cntnt:
 	class LabelNameError(Exception): pass
 	class TypeNameError(Exception): pass
 	class ContentNotExixtsError(Exception): pass
-	class ParentNotFoundError(Exception): pass
 	class LabelNotUniqError(Exception): pass
 	class ContentHasChilds(Exception): pass
 	class ContentHasNoChilds(Exception): pass
@@ -25,7 +24,7 @@ class cntnt:
 		self.conn.revert()
 
 	def read(self, id, followPointer = True, isPointed = False):
-		self.c.execute("select * from contents where contentid=%s"%id)
+		self.c.execute('SELECT * FROM contents WHERE contentid = %s AND deletedate IS NULL'%id)
 		row = self.c.fetchone()
 		# Check if row exists
 		if not row:
@@ -42,7 +41,7 @@ class cntnt:
 		return result
 
 	def readChilds(self, id):
-		self.c.execute("select * from contents where parent=%s"% (id))
+		self.c.execute('SELECT * FROM contents WHERE parent = %s AND deletedate IS NULL'% (id))
 		result = []
 		childs = self.c.fetchall()
 		for child in childs:
@@ -65,18 +64,15 @@ class cntnt:
 		if not checkName(label):
 			raise self.LabelNameError, 'Error in label name validation: "%s"' % label
 		# Check if parent exists
-		self.c.execute('select * from contents where contentid=%s' % parent)
-		if not self.c.fetchone():
-			raise self.ParentNotFoundError
-		# Check if label is uniq
-		self.c.execute('select * from contents where parent=%s and label="%s"' % (parent, label))
+		self.read(parent)
+		self.c.execute('SELECT * FROM contents WHERE parent=%s AND label="%s" AND deletedate IS NULL' % (parent, label))
 		if label != "" and self.c.fetchone():
 			raise self.LabelNotUniqError, "Check label:%s" % label
 		# Get next content id
-		self.c.execute('select max(contentid) as contentid from contents')
+		self.c.execute('SELECT MAX(contentid) AS contentid FROM contents')
 		nextcid = int(1 + self.c.fetchone().contentid)
 		# Get next version number(id)
-		self.c.execute('select max(id) as ver from contents')
+		self.c.execute('SELECT MAX(id) AS ver FROM contents')
 		nextid = int(1 + self.c.fetchone().ver)
 		# Create record
 		createdate = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
@@ -93,9 +89,9 @@ class cntnt:
 		childs = self.readChilds(id)
 		if len(childs) != 0:
 			raise ContentHasChilds, "Content has %s childs" % len(childs)
-		# TODO: delete() must UPDATE records (not DELETE) to be marked as deleted
 		# Delete record
-		sql = 'delete from contents where contentid = %s' % (id)
+		deletedate = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+		sql = 'UPDATE contents SET deletedate = "%s" WHERE contentid = %s AND deletedate IS NULL' % (deletedate, id)
 		self.c.execute(sql)
 		self.commit()
 		return id
@@ -106,7 +102,7 @@ class cntnt:
 			childIds = self.deepDelete(child["contentid"])
 			ids.extend(childIds)
 		self.delete(id)
-		ids.append(id)
+		ids.append(int(id))
 		# Return a list of deleted ids
 		return ids
 
