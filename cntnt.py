@@ -3,8 +3,6 @@ import sqlite
 import sys, re, datetime
 
 class cntnt:
-	# TODO: There are lots of confusion between id and contentid.
-	# id means version number, content id means id
 
 	# Exception Definitions
 	class LabelNameError(Exception): pass
@@ -27,9 +25,7 @@ class cntnt:
 		self.conn.revert()
 
 	def read(self, id, followPointer = True, isPointed = False):
-		# TODO: add a flag named "followPointer" for pointer typed contents
-		result = {}
-		self.c.execute("select * from contents where id=%s"%id)
+		self.c.execute("select * from contents where contentid=%s"%id)
 		row = self.c.fetchone()
 		# Check if row exists
 		if not row:
@@ -38,6 +34,7 @@ class cntnt:
 		if followPointer == True and row.type == 'ptr':
 			return self.read(row[content], isPointed = True)
 		# Prepare result dict
+		result = {}
 		for key in row.keys():
 			result[key] = row[key]
 		# Add extra keys for pointers, etc.
@@ -68,7 +65,7 @@ class cntnt:
 		if not checkName(label):
 			raise self.LabelNameError, 'Error in label name validation: "%s"' % label
 		# Check if parent exists
-		self.c.execute('select * from contents where id=%s' % parent)
+		self.c.execute('select * from contents where contentid=%s' % parent)
 		if not self.c.fetchone():
 			raise self.ParentNotFoundError
 		# Check if label is uniq
@@ -76,8 +73,8 @@ class cntnt:
 		if label != "" and self.c.fetchone():
 			raise self.LabelNotUniqError, "Check label:%s" % label
 		# Get next content id
-		self.c.execute('select max(contentid) as id from contents')
-		nextcid = int(1 + self.c.fetchone().id)
+		self.c.execute('select max(contentid) as contentid from contents')
+		nextcid = int(1 + self.c.fetchone().contentid)
 		# Get next version number(id)
 		self.c.execute('select max(id) as ver from contents')
 		nextid = int(1 + self.c.fetchone().ver)
@@ -87,11 +84,10 @@ class cntnt:
 		sql = sql % (nextid, nextcid, content, label, type, parent, nextid, createdate)
 		self.c.execute(sql)
 		self.commit()
-		id = self.c.lastrowid
-		return self.read(id)
+		return self.read(nextcid)
 
 	def delete(self, id):
-		# Check if id exists
+		# Check if content id exists
 		self.read(id)
 		# Check if content has childs
 		childs = self.readChilds(id)
@@ -99,7 +95,7 @@ class cntnt:
 			raise ContentHasChilds, "Content has %s childs" % len(childs)
 		# TODO: delete() must UPDATE records (not DELETE) to be marked as deleted
 		# Delete record
-		sql = 'delete from contents where id = %s' % (id)
+		sql = 'delete from contents where contentid = %s' % (id)
 		self.c.execute(sql)
 		self.commit()
 		return id
@@ -107,7 +103,7 @@ class cntnt:
 	def deepDelete(self, id):
 		ids = []
 		for child in self.readChilds(id):
-			childIds = self.deepDelete(child["id"])
+			childIds = self.deepDelete(child["contentid"])
 			ids.extend(childIds)
 		self.delete(id)
 		ids.append(id)
