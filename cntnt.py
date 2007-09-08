@@ -1,6 +1,6 @@
 #!/usr/bin/python
 import sqlite
-import sys
+import sys, re, datetime
 
 class cntnt:
 	# TODO: Add parameter check
@@ -15,6 +15,7 @@ class cntnt:
 		self.conn.revert()
 
 	def read(self, id):
+		#TODO: add a flag named "followPointer" for pointer typed contents
 		try:
 			self.c.execute("select * from contents where id=%s"%id)
 			result = self.c.fetchone()
@@ -22,6 +23,7 @@ class cntnt:
 		except:
 			result = False
 			self.revert()
+		#TODO: read must returns a dict
 		return result
 
 	def readChilds(self, id):
@@ -42,23 +44,45 @@ class cntnt:
 # Insert root record
 # c.execute('''INSERT INTO "contents" (id, contentid, content, label, type, parent, startver, createdate) VALUES (0 ,0 ,"root" ,"root" ,"content" ,0 , 0, "20070818100000" )''')
 	def create(self, content="", type="", parent=0, label=""):
-		#TODO: add label uniqer
+		#TODO: Check if type is defined
+		# Check if label and type names are valid
+		def checkName(string):
+			return bool(re.match("^[A-Za-z0-9]*$",string))
+		if not checkName(label) or not checkName(type):
+			return False
+		# Check if parent exists
+		self.c.execute('select * from contents where id=%s' % parent)
+		if not self.c.fetchone():
+			return False
+		# Check if label is uniq
+		self.c.execute('select * from contents where parent=%s and label="%s"' % (parent, label))
+		if label != "" and self.c.fetchone():
+			return False
+		# Get next content id
+		self.c.execute('select max(contentid) as ver from contents')
+		nextcid = int(1 + self.c.fetchone().ver)
+		# Get next version number(id)
 		self.c.execute('select max(id) as ver from contents')
 		nextid = int(1 + self.c.fetchone().ver)
-		sql = 'INSERT INTO "contents" (id, contentid, content, label, type, parent, startver, createdate) VALUES (%s ,%s , "%s" ,"%s" ,"%s" ,%s , %s, "20070818100000" )'
-		sql = sql % (nextid, nextid, content, label, type, parent, nextid)
+		# Create record
+		createdate = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+		sql = 'INSERT INTO "contents" (id, contentid, content, label, type, parent, startver, createdate) VALUES (%s ,%s , "%s" ,"%s" ,"%s" ,%s , %s, "%s" )'
+		sql = sql % (nextid, nextcid, content, label, type, parent, nextid, createdate)
 		self.c.execute(sql)
 		id = self.c.lastrowid
 		return self.read(id)
 
 	def delete(self, id):
+		# Check if id exists
 		if not self.read(id):
 			return None
+		# Check if content has childs
 		self.c.execute('select id from contents where parent = %s' % id)
 		childs = self.c.fetchall()
 		if len(childs)!=0:
-			# Content has childs. Not deleted.
 			return False
+		#TODO: delete() must UPDATE records (not DELETE) to be marked as deleted
+		# Delete record
 		sql = 'delete from contents where id = %s' % (id)
 		self.c.execute(sql)
 		self.commit()
@@ -79,6 +103,7 @@ class cntnt:
 			result = False
 		else:
 			result = ids
+		# Return a list of deleted ids
 		return result
 
 # here after there is only command line functions
