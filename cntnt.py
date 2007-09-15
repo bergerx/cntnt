@@ -37,11 +37,15 @@ class cntnt:
 		result = {}
 		for key in row.keys():
 			result[key] = row[key]
+		# TODO: Add pointedFrom key for poniter followed contents.
 		# Add extra keys for pointers, etc.
 		result['isPointed'] = isPointed
 		return result
 
 	def readChilds(self, id, label = "", type = ""):
+		# TODO: Add followPointerSelf parameter for id and followPointer childs.
+		# followPointerSelf will be needed for readind any pointers child contents.
+		# followPointer will be needed for deep delete.
 		sqlexpr = ""
 		if label != "":
 			sqlexpr += 'AND label = "%s"' % label
@@ -82,6 +86,7 @@ class cntnt:
 # Insert root record
 # c.execute('''INSERT INTO "contents" (id, contentid, content, label, type, parent, startver, createdate) VALUES (0 ,0 ,"root" ,"root" ,"content" ,0 , 0, "20070818100000" )''')
 	def create(self, content="", type="", parent=0, label="", id=0):
+		# TODO: If declared a "label" for parent's type definition for this type of content use that label as default.
 		# Do creation parameter checks, raises exception on parameter errors
 		self.checkForCreate(content=content, type=type, parent=parent, label=label, id=id)
 		# Get next version number(id) if its not given
@@ -99,6 +104,8 @@ class cntnt:
 		return self.read(id)
 
 	def delete(self, id):
+		# TODO: Check if content is a pointer. Add a followPpointer paramter. Add pointedFrom key for poniter followed contents.
+
 		# Check if content id exists
 		self.read(id)
 		# Check if content has childs
@@ -113,6 +120,8 @@ class cntnt:
 		return id
 
 	def deepDelete(self, id):
+		# FIXME: This function deletes pointe targets instead of pointewr contetnts itself.
+		# We must use pointedFrom key from read contents.
 		ids = []
 		for child in self.readChilds(id):
 			childIds = self.deepDelete(child["contentid"])
