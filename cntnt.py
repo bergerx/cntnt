@@ -4,6 +4,10 @@ import sys, re, datetime
 
 class cntnt:
 
+	# Constant Definitions
+	POINTER_TYPE_NAME = "ptr"
+	TYPE_LABEL_REGEX = "^[A-Za-z0-9]*$"
+
 	# Exception Definitions
 	class LabelNameError(Exception): pass
 	class TypeNameError(Exception): pass
@@ -24,7 +28,8 @@ class cntnt:
 	def revert(self):
 		self.conn.revert()
 
-	def read(self, id, followPointer = True, isPointed = False):
+	def read(self, id, followPointer = True, isPointed = False,
+			 pointedFrom = None):
 		self.c.execute('''SELECT * FROM contents
 			WHERE contentid = "%s" AND deletedate IS NULL'''%id)
 		row = self.c.fetchone()
@@ -32,21 +37,21 @@ class cntnt:
 		if not row:
 			raise self.ContentNotExistsError, 'ID not exists:"%s"' % id
 		# If content is a pointer
-		if followPointer == True and row.type == 'ptr':
-			return self.read(row[content], isPointed = True)
+		if followPointer == True and row.type == self.POINTER_TYPE_NAME:
+			return self.read(row["content"], isPointed = True,
+							 pointedFrom = id)
 		# Prepare result dict
 		result = {}
 		for key in row.keys():
 			result[key] = row[key]
-		# TODO: Add pointedFrom key for poniter followed contents.
 		# Add extra keys for pointers, etc.
 		result['isPointed'] = isPointed
+		result['pointedFrom'] = pointedFrom
 		return result
 
-	def readChilds(self, id, label = "", type = ""):
-		# TODO: Add followPointerSelf parameter for id and
-		# followPointer childs.
-		# followPointerSelf will be needed for readind any pointers
+	def readChilds(self, id, label = "", type = "", followPointer = True,
+				   followPointerSelf = True):
+		# followPointerSelf will be needed for reading any pointers
 		# child contents.
 		# followPointer will be needed for deep delete.
 		sqlexpr = ""
@@ -54,19 +59,23 @@ class cntnt:
 			sqlexpr += 'AND label = "%s"' % label
 		if type != "":
 			sqlexpr += 'AND type = "%s"' % type
+		if followPointerSelf:
+			myself = self.read(id)
+			id = myself["contentid"]
 		self.c.execute('''SELECT * FROM contents
 			WHERE parent = %s AND deletedate IS NULL %s''' % (id, sqlexpr))
 		result = []
 		childs = self.c.fetchall()
 		for child in childs:
-			result.append(self.read(child.contentid))
+			result.append(self.read(child.contentid,
+									followPointer=followPointer))
 		return result
 
 	def checkForCreate(self, content="", type="", parent=0, label="", id=0):
 		# TODO: Check if type is defined
 		# Check if label and type names are valid
 		def checkName(string):
-			return bool(re.match("^[A-Za-z0-9]*$",string))
+			return bool(re.match(self.TYPE_LABEL_REGEX, string))
 		if not checkName(type):
 			raise self.TypeNameError, 'Error in type name validation: "%s"' % type
 		if not checkName(label):
@@ -157,16 +166,13 @@ class cntnt:
 		self.commit()
 		return self.read(id)
 
-	def delete(self, id):
-		# TODO: Check if content is a pointer. Add a followPpointer
-		# paramter. Add pointedFrom key for poniter followed contents.
-
+	def delete(self, id, followPointer = False):
 		# Check if content id exists
-		self.read(id)
+		self.read(id, followPointer=followPointer)
 		# Check if content has childs
-		childs = self.readChilds(id)
+		childs = self.readChilds(id, followPointer=followPointer)
 		if len(childs) != 0:
-			raise ContentHasChilds, "Content has %s childs" % len(childs)
+			raise self.ContentHasChilds, "Content(%s) has %s childs" % (id, len(childs))
 		# Delete record
 		deletedate = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
 		sql = '''UPDATE contents SET deletedate = "%s" WHERE contentid = "%s"
@@ -176,13 +182,14 @@ class cntnt:
 		return id
 
 	def deepDelete(self, id):
-		# FIXME: This function deletes pointe targets instead of
+		# FIXME: This function deletes pointer targets instead of
 		# pointewr contetnts itself.
 
 		# We must use pointedFrom key from read contents.
 		ids = []
 		for child in self.readChilds(id):
-			childIds = self.deepDelete(child["contentid"])
+			notPointedId = child["pointedFrom"] or child["contentid"]
+			childIds = self.deepDelete(notPointedId)
 			ids.extend(childIds)
 		self.delete(id)
 		ids.append(int(id))
@@ -232,7 +239,7 @@ class cntnt:
 
 # here after there is only command line functions
 def tree(cnt, id=0, level=0):
-	childs = cnt.readChilds(id)
+	childs = cnt.readChilds(id, followPointer = False)
 	for child in childs:
 		output = "%4d %s" % (child["contentid"], " "*level*4)
 		output += child["content"]
@@ -288,12 +295,15 @@ def main():
 			print "You must supply --content, --type and --parent"
 			sys.exit(0)
 		print cnt.create(content=content, type=type, parent=parent,
-						 label=label, id=id)
+							 label=label, id=id)
 	elif crud == "read":
 		if path: print cnt.getCPath(path)
 		if id: print cnt.read(id)
 	elif crud == "tree": tree(cnt, id)
 	elif crud == "update":
+		if id == 0:
+			print "You must supply --id and one of --content, --type, --parent"
+			sys.exit(0)
 		print cnt.update(id=id, content=content, type=type, parent=parent,
 						 label=label)
 	elif crud == "delete": print cnt.delete(id)
