@@ -25,7 +25,8 @@ class cntnt:
 		self.conn.revert()
 
 	def read(self, id, followPointer = True, isPointed = False):
-		self.c.execute('SELECT * FROM contents WHERE contentid = "%s" AND deletedate IS NULL'%id)
+		self.c.execute('''SELECT * FROM contents
+			WHERE contentid = "%s" AND deletedate IS NULL'''%id)
 		row = self.c.fetchone()
 		# Check if row exists
 		if not row:
@@ -43,15 +44,18 @@ class cntnt:
 		return result
 
 	def readChilds(self, id, label = "", type = ""):
-		# TODO: Add followPointerSelf parameter for id and followPointer childs.
-		# followPointerSelf will be needed for readind any pointers child contents.
+		# TODO: Add followPointerSelf parameter for id and
+		# followPointer childs.
+		# followPointerSelf will be needed for readind any pointers
+		# child contents.
 		# followPointer will be needed for deep delete.
 		sqlexpr = ""
 		if label != "":
 			sqlexpr += 'AND label = "%s"' % label
 		if type != "":
 			sqlexpr += 'AND type = "%s"' % type
-		self.c.execute('SELECT * FROM contents WHERE parent = %s AND deletedate IS NULL %s' % (id, sqlexpr))
+		self.c.execute('''SELECT * FROM contents
+			WHERE parent = %s AND deletedate IS NULL %s''' % (id, sqlexpr))
 		result = []
 		childs = self.c.fetchall()
 		for child in childs:
@@ -69,7 +73,8 @@ class cntnt:
 			raise self.LabelNameError, 'Error in label name validation: "%s"' % label
 		# Check if parent exists
 		self.read(parent)
-		self.c.execute('SELECT * FROM contents WHERE parent=%s AND label="%s" AND deletedate IS NULL' % (parent, label))
+		self.c.execute('''SELECT * FROM contents
+			WHERE parent=%s AND label="%s" AND deletedate IS NULL''' % (parent, label))
 		if label != "" and self.c.fetchone():
 			raise self.LabelNotUniqError, "Check label:%s" % label
 		# Check if content id exists
@@ -79,16 +84,63 @@ class cntnt:
 		except self.ContentNotExistsError:
 			pass
 
-# Create table
-# c.execute('''CREATE TABLE "contents" (id INTEGER NOT NULL PRIMARY KEY UNIQUE, contentid INTEGER NOT NULL, content VARCHAR, label VARCHAR, type VARCHAR, parent INTEGER NOT NULL, startver INTEGER NOT NULL, endver INTEGER, createdate VARCHAR NOT NULL, deletedate VARCHAR);''')
-# Insert a row of data
-# c.execute('''INSERT INTO "contents" (id, contentid, content, label, type, parent, startver, endver, createdate, deletedate) VALUES ( , , , , , , , , , )''')
-# Insert root record
-# c.execute('''INSERT INTO "contents" (id, contentid, content, label, type, parent, startver, createdate) VALUES (0 ,0 ,"root" ,"root" ,"content" ,0 , 0, "20070818100000" )''')
+# - Create table
+# CREATE TABLE "contents" (
+# 	id INTEGER NOT NULL PRIMARY KEY UNIQUE,
+# 	contentid INTEGER NOT NULL,
+# 	content VARCHAR,
+# 	label VARCHAR,
+# 	type VARCHAR,
+# 	parent INTEGER NOT NULL,
+# 	startver INTEGER NOT NULL,
+# 	endver INTEGER,
+# 	createdate VARCHAR NOT NULL,
+# 	deletedate VARCHAR
+# );
+
+# - Insert root record
+# INSERT INTO "contents" (
+# 	id,
+# 	contentid,
+# 	content,
+# 	label,
+# 	type,
+# 	parent,
+# 	startver,
+# 	createdate
+# ) VALUES (
+# 	0,
+# 	0,
+# 	"root",
+# 	"root",
+# 	"content",
+# 	0,
+# 	0,
+# 	"20070818100000"
+# );
+
+# - Insert a row of data
+# INSERT INTO "contents" (
+# 	id,
+# 	contentid,
+# 	content,
+# 	label,
+# 	type,
+# 	parent,
+# 	startver,
+# 	endver,
+# 	createdate,
+# 	deletedate
+# ) VALUES ( , , , , , , , , , );
+
 	def create(self, content="", type="", parent=0, label="", id=0):
-		# TODO: If declared a "label" for parent's type definition for this type of content use that label as default.
-		# Do creation parameter checks, raises exception on parameter errors
-		self.checkForCreate(content=content, type=type, parent=parent, label=label, id=id)
+		# TODO: If declared a "label" for parent's type definition for
+		# this type of content use that label as default.
+
+		# Do creation parameter checks, raises exception on parameter
+		# errors
+		self.checkForCreate(content=content, type=type, parent=parent,
+			label=label, id=id)
 		# Get next version number(id) if its not given
 		if not id:
 			self.c.execute('SELECT MAX(contentid) AS contentid FROM contents')
@@ -97,14 +149,17 @@ class cntnt:
 		ver = int(1 + self.c.fetchone().ver)
 		# Create record
 		createdate = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-		sql = 'INSERT INTO "contents" (id, contentid, content, label, type, parent, startver, createdate) VALUES ("%s" ,"%s" , "%s" ,"%s" ,"%s" ,"%s" , "%s", "%s" )'
+		sql = '''INSERT INTO "contents" (id, contentid, content, label,
+			type, parent, startver, createdate) VALUES ("%s" ,"%s" ,
+			"%s" ,"%s" ,"%s" ,"%s" , "%s", "%s" )'''
 		sql = sql % (ver, id, content, label, type, parent, ver, createdate)
 		self.c.execute(sql)
 		self.commit()
 		return self.read(id)
 
 	def delete(self, id):
-		# TODO: Check if content is a pointer. Add a followPpointer paramter. Add pointedFrom key for poniter followed contents.
+		# TODO: Check if content is a pointer. Add a followPpointer
+		# paramter. Add pointedFrom key for poniter followed contents.
 
 		# Check if content id exists
 		self.read(id)
@@ -114,13 +169,16 @@ class cntnt:
 			raise ContentHasChilds, "Content has %s childs" % len(childs)
 		# Delete record
 		deletedate = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-		sql = 'UPDATE contents SET deletedate = "%s" WHERE contentid = "%s" AND deletedate IS NULL' % (deletedate, id)
+		sql = '''UPDATE contents SET deletedate = "%s" WHERE contentid = "%s"
+			AND deletedate IS NULL''' % (deletedate, id)
 		self.c.execute(sql)
 		self.commit()
 		return id
 
 	def deepDelete(self, id):
-		# FIXME: This function deletes pointe targets instead of pointewr contetnts itself.
+		# FIXME: This function deletes pointe targets instead of
+		# pointewr contetnts itself.
+
 		# We must use pointedFrom key from read contents.
 		ids = []
 		for child in self.readChilds(id):
@@ -132,9 +190,11 @@ class cntnt:
 		return ids
 
 	def update(self, id, content="", type="", parent=0, label=""):
-		# Do creation parameter checks, raises exception on parameter errors
+		# Do creation parameter checks, raises exception on parameter
+		# errors
 		try:
-			self.checkForCreate(content=content, type=type, parent=parent, label=label, id=id)
+			self.checkForCreate(content=content, type=type,
+				parent=parent, label=label, id=id)
 		except self.ContentExistsError:
 			pass
 		cnt = self.read(id)
@@ -143,8 +203,10 @@ class cntnt:
 		if type: cnt["type"] = type
 		if parent: cnt["parent"] = parent
 		if label: cnt["label"] = label
-		# FIXME: if new label exist or label/type names are not valid content will be deleted only
-		return self.create(content=content, type=type, parent=parent, label=label, id=id)
+		# FIXME: if new label exist or label/type names are not valid
+		# content will be deleted only
+		return self.create(content=content, type=type, parent=parent,
+			label=label, id=id)
 
 	def getCPath(self, path, parent = 0):
 		# FIXME: Not implemented yet
@@ -188,7 +250,9 @@ def main():
 	import getopt
 	cnt = cntnt('hede.db')
 	try:
-		opts, args = getopt.getopt(sys.argv[1:], "ho:crudDt", ["help", "output=", "id=", "content=", "label=", "type=", "parent=", "path="])
+		opts, args = getopt.getopt(sys.argv[1:], "ho:crudDt", ["help",
+			"output=", "id=", "content=", "label=", "type=", "parent=",
+			"path="])
 	except getopt.GetoptError:
 		usage()
 		sys.exit(2)
@@ -205,53 +269,36 @@ def main():
 		if o in ("-h", "--help"):
 			usage()
 			sys.exit(0)
-		if o in ("-o", "--output"):
-			print a
-		if o == "-c":
-			crud = "create"
-		if o == "-r":
-			crud = "read"
-		if o == "-u":
-			crud = "update"
-		if o == "-d":
-			crud = "delete"
-		if o == "-D":
-			crud = "deepdelete"
-		if o == "-t":
-			crud = "tree"
-		if o == "--id":
-			id = a
-		if o == "--content":
-			content = a
-		if o == "--label":
-			label = a
-		if o == "--type":
-			type = a
-		if o == "--parent":
-			parent = a
-		if o == "--path":
-			path = a
+		if o in ("-o", "--output"): print a
+		if o == "-c": crud = "create"
+		if o == "-r": crud = "read"
+		if o == "-u": crud = "update"
+		if o == "-d": crud = "delete"
+		if o == "-D": crud = "deepdelete"
+		if o == "-t": crud = "tree"
+		if o == "--id": id = a
+		if o == "--content": content = a
+		if o == "--label": label = a
+		if o == "--type": type = a
+		if o == "--parent": parent = a
+		if o == "--path": path = a
 
 	if crud == "create":
 		if "" in (content, type, parent):
 			print "You must supply --content, --type and --parent"
 			sys.exit(0)
-		print cnt.create(content=content, type=type, parent=parent, label=label, id=id)
+		print cnt.create(content=content, type=type, parent=parent,
+						 label=label, id=id)
 	elif crud == "read":
-		if path:
-			print cnt.getCPath(path)
-		if id:
-			print cnt.read(id)
-	elif crud == "tree":
-		tree(cnt, id)
+		if path: print cnt.getCPath(path)
+		if id: print cnt.read(id)
+	elif crud == "tree": tree(cnt, id)
 	elif crud == "update":
-		print cnt.update(id=id, content=content, type=type, parent=parent, label=label)
-	elif crud == "delete":
-		print cnt.delete(id)
-	elif crud == "deepdelete":
-		print cnt.deepDelete(id)
-	else:
-		usage()
+		print cnt.update(id=id, content=content, type=type, parent=parent,
+						 label=label)
+	elif crud == "delete": print cnt.delete(id)
+	elif crud == "deepdelete": print cnt.deepDelete(id)
+	else: usage()
 	sys.exit(0)
 
 if __name__=="__main__":
