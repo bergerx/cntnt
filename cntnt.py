@@ -2,6 +2,56 @@
 import sqlite
 import sys, re, datetime
 
+
+# - Create table
+# CREATE TABLE "contents" (
+# 	id INTEGER NOT NULL PRIMARY KEY UNIQUE,
+# 	contentid INTEGER NOT NULL,
+# 	content VARCHAR,
+# 	label VARCHAR,
+# 	type VARCHAR,
+# 	parent INTEGER NOT NULL,
+# 	startver INTEGER NOT NULL,
+# 	endver INTEGER,
+# 	createdate VARCHAR NOT NULL,
+# 	deletedate VARCHAR
+# );
+
+# - Insert root record
+# INSERT INTO "contents" (
+# 	id,
+# 	contentid,
+# 	content,
+# 	label,
+# 	type,
+# 	parent,
+# 	startver,
+# 	createdate
+# ) VALUES (
+# 	0,
+# 	0,
+# 	"root",
+# 	"root",
+# 	"content",
+# 	0,
+# 	0,
+# 	"20070818100000"
+# );
+
+# - Insert a row of data
+# INSERT INTO "contents" (
+# 	id,
+# 	contentid,
+# 	content,
+# 	label,
+# 	type,
+# 	parent,
+# 	startver,
+# 	endver,
+# 	createdate,
+# 	deletedate
+# ) VALUES ( , , , , , , , , , );
+
 class cntnt:
 
 	# Constant Definitions
@@ -80,8 +130,8 @@ class cntnt:
 			raise self.TypeNameError, 'Error in type name validation: "%s"' % type
 		if not checkName(label):
 			raise self.LabelNameError, 'Error in label name validation: "%s"' % label
-		# Check if parent exists
-		self.read(parent)
+		# Check if parent exists (exception for root record)
+		not id and self.read(parent)
 		self.c.execute('''SELECT * FROM contents
 			WHERE parent=%s AND label="%s" AND deletedate IS NULL''' % (parent, label))
 		if label != "" and self.c.fetchone():
@@ -92,55 +142,6 @@ class cntnt:
 				raise self.ContentExistsError, "Content already exists which has this id:%s" % id
 		except self.ContentNotExistsError:
 			pass
-
-# - Create table
-# CREATE TABLE "contents" (
-# 	id INTEGER NOT NULL PRIMARY KEY UNIQUE,
-# 	contentid INTEGER NOT NULL,
-# 	content VARCHAR,
-# 	label VARCHAR,
-# 	type VARCHAR,
-# 	parent INTEGER NOT NULL,
-# 	startver INTEGER NOT NULL,
-# 	endver INTEGER,
-# 	createdate VARCHAR NOT NULL,
-# 	deletedate VARCHAR
-# );
-
-# - Insert root record
-# INSERT INTO "contents" (
-# 	id,
-# 	contentid,
-# 	content,
-# 	label,
-# 	type,
-# 	parent,
-# 	startver,
-# 	createdate
-# ) VALUES (
-# 	0,
-# 	0,
-# 	"root",
-# 	"root",
-# 	"content",
-# 	0,
-# 	0,
-# 	"20070818100000"
-# );
-
-# - Insert a row of data
-# INSERT INTO "contents" (
-# 	id,
-# 	contentid,
-# 	content,
-# 	label,
-# 	type,
-# 	parent,
-# 	startver,
-# 	endver,
-# 	createdate,
-# 	deletedate
-# ) VALUES ( , , , , , , , , , );
 
 	def create(self, content="", type="", parent=0, label="", id=0):
 		# TODO: If declared a "label" for parent's type definition for
@@ -166,12 +167,12 @@ class cntnt:
 		self.commit()
 		return self.read(id)
 
-	def delete(self, id, followPointer = False):
+	def delete(self, id, followPointer = False, force = False):
 		# Check if content id exists
 		self.read(id, followPointer=followPointer)
 		# Check if content has childs
 		childs = self.readChilds(id, followPointer=followPointer)
-		if len(childs) != 0:
+		if not force and len(childs) != 0:
 			raise self.ContentHasChilds, "Content(%s) has %s childs" % (id, len(childs))
 		# Delete record
 		deletedate = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
@@ -197,6 +198,8 @@ class cntnt:
 		return ids
 
 	def update(self, id, content="", type="", parent=0, label=""):
+		# Update not allowed for root
+		if not id: return self.read(0)
 		# Do creation parameter checks, raises exception on parameter
 		# errors
 		try:
@@ -205,7 +208,7 @@ class cntnt:
 		except self.ContentExistsError:
 			pass
 		cnt = self.read(id)
-		self.delete(id)
+		self.delete(id, force = True)
 		if content: cnt["content"] = content
 		if type: cnt["type"] = type
 		if parent: cnt["parent"] = parent
@@ -216,26 +219,29 @@ class cntnt:
 			label=label, id=id)
 
 	def getCPath(self, path, parent = 0):
-		# FIXME: Not implemented yet
-		branchExpr, residual = path.split(".",1)
-		arr = []
-		for id in self.executeBranchExpr(parent, branchExpr):
-			childIds = getCPath(residual, id)
-			arr.extend(childIds)
-		return arr
+		ids = []
+		if path.count("."):
+			branchExpr, residual = path.split(".",1)
+			childids = self.executeBranchExpr(parent, branchExpr)
+			for childid in childids:
+				ids.extend(self.getCPath(residual, childid))
+		else:
+   			ids = self.executeBranchExpr(parent, path)
+		return ids
 
 	def executeBranchExpr(self, parent, expr):
-		# FIXME: Not implemented yet
-		# Type expression
-#		if expr[0,2] == "__":
+		# FIXME: Not fully implemented yet
+		contents = []
+		# Type expression: "__typename[n]" or "__typename"
+		if len(expr) > 2 and expr[0:2] == "__":
 			# TODO: Not implenmented type expressions
-#			type = expr[2:]
-#			return []
-		#Label expression
-		if expr[0] == "_":
+			type = expr[2:]
+			contents = self.readChilds(parent, type = type)
+		#Label expression: "_labelname"
+		if len(expr) > 1 and expr[0] == "_":
 			label = expr[1:]
-			return self.readChilds(parent, label = label)
-		return []
+			contents = self.readChilds(parent, label = label)
+		return [c["contentid"] for c in contents]
 
 # here after there is only command line functions
 def tree(cnt, id=0, level=0):
