@@ -1,0 +1,13 @@
+CREATE TABLE "contents" (
+	id INTEGER NOT NULL PRIMARY KEY UNIQUE,
+	contentid INTEGER NOT NULL,
+	content BLOB,
+	label TEXT,
+	type TEXT,
+	ord INTEGER,
+	parent INTEGER NOT NULL,
+	startver INTEGER NOT NULL,
+	endver INTEGER,
+	createdate TEXT NOT NULL,
+	deletedate TEXT);
+INSERT INTO contents VALUES(0,0,'root','root','',0,-1,0,NULL,20070818100000,NULL);

@@ -1,56 +1,26 @@
 #!/usr/bin/python
-import sqlite
+import sqlite3
 import sys, re, datetime
+import logging
 
+logging.basicConfig(level=logging.DEBUG,
+					format='%(asctime)s %(levelname)-8s %(message)s',
+					datefmt='%Y%m%d%H%M%S',
+					filename='cntnt.log')
 
-# - Create table
-# CREATE TABLE "contents" (
-# 	id INTEGER NOT NULL PRIMARY KEY UNIQUE,
-# 	contentid INTEGER NOT NULL,
-# 	content VARCHAR,
-# 	label VARCHAR,
-# 	type VARCHAR,
-# 	parent INTEGER NOT NULL,
-# 	startver INTEGER NOT NULL,
-# 	endver INTEGER,
-# 	createdate VARCHAR NOT NULL,
-# 	deletedate VARCHAR
-# );
+# For debugging (logging) sql queries
+class CntntCursor(sqlite3.Cursor):
+	def execute(self, *args, **kwargs):
+		logging.debug(args)
+		sqlite3.Cursor.execute(self, *args, **kwargs)
 
-# - Insert root record
-# INSERT INTO "contents" (
-# 	id,
-# 	contentid,
-# 	content,
-# 	label,
-# 	type,
-# 	parent,
-# 	startver,
-# 	createdate
-# ) VALUES (
-# 	0,
-# 	0,
-# 	"root",
-# 	"root",
-# 	"content",
-# 	0,
-# 	0,
-# 	"20070818100000"
-# );
+# Prepare result dict_factory for sqlite3 cursor results
+def dict_factory(cursor, row):
+	d = {}
+	for idx, col in enumerate(cursor.description):
+		d[col[0]] = row[idx]
+	return d
 
-# - Insert a row of data
-# INSERT INTO "contents" (
-# 	id,
-# 	contentid,
-# 	content,
-# 	label,
-# 	type,
-# 	parent,
-# 	startver,
-# 	endver,
-# 	createdate,
-# 	deletedate
-# ) VALUES ( , , , , , , , , , );
 
 class cntnt:
 
@@ -69,8 +39,9 @@ class cntnt:
 
 	# TODO: Add parameter check
 	def __init__(self, dbfile):
-		self.conn = sqlite.connect(dbfile)
-		self.c = self.conn.cursor()
+		self.conn = sqlite3.connect(dbfile)
+		self.conn.row_factory = dict_factory
+		self.c = self.conn.cursor(factory=CntntCursor)
 
 	def commit(self):
 		self.conn.commit()
@@ -81,23 +52,19 @@ class cntnt:
 	def read(self, id, followPointer = True, isPointed = False,
 			 pointedFrom = None):
 		self.c.execute('''SELECT * FROM contents
-			WHERE contentid = "%s" AND deletedate IS NULL'''%id)
+			WHERE contentid = ? AND deletedate IS NULL''', (id,))
 		row = self.c.fetchone()
 		# Check if row exists
 		if not row:
 			raise self.ContentNotExistsError, 'ID not exists:"%s"' % id
+		# Add extra keys for pointers, etc.
+		row['isPointed'] = isPointed
+		row['pointedFrom'] = pointedFrom
 		# If content is a pointer
-		if followPointer == True and row.type == self.POINTER_TYPE_NAME:
+		if followPointer == True and row["type"] == self.POINTER_TYPE_NAME:
 			return self.read(row["content"], isPointed = True,
 							 pointedFrom = id)
-		# Prepare result dict
-		result = {}
-		for key in row.keys():
-			result[key] = row[key]
-		# Add extra keys for pointers, etc.
-		result['isPointed'] = isPointed
-		result['pointedFrom'] = pointedFrom
-		return result
+		return row
 
 	def readChilds(self, id, label = "", type = "", followPointer = True,
 				   followPointerSelf = True):
@@ -113,11 +80,11 @@ class cntnt:
 			myself = self.read(id)
 			id = myself["contentid"]
 		self.c.execute('''SELECT * FROM contents
-			WHERE parent = %s AND deletedate IS NULL %s''' % (id, sqlexpr))
+			WHERE parent = ? AND deletedate IS NULL %s'''%sqlexpr, (id,))
 		result = []
 		childs = self.c.fetchall()
 		for child in childs:
-			result.append(self.read(child.contentid,
+			result.append(self.read(child["contentid"],
 									followPointer=followPointer))
 		return result
 
@@ -133,7 +100,7 @@ class cntnt:
 		# Check if parent exists (exception for root record)
 		not id and self.read(parent)
 		self.c.execute('''SELECT * FROM contents
-			WHERE parent=%s AND label="%s" AND deletedate IS NULL''' % (parent, label))
+			WHERE label = ? AND parent = ? AND deletedate IS NULL''', (label, parent))
 		if label != "" and self.c.fetchone():
 			raise self.LabelNotUniqError, "Check label:%s" % label
 		# Check if content id exists
@@ -142,6 +109,7 @@ class cntnt:
 				raise self.ContentExistsError, "Content already exists which has this id:%s" % id
 		except self.ContentNotExistsError:
 			pass
+
 
 	def create(self, content="", type="", parent=0, label="", id=0):
 		# TODO: If declared a "label" for parent's type definition for
@@ -154,16 +122,17 @@ class cntnt:
 		# Get next version number(id) if its not given
 		if not id:
 			self.c.execute('SELECT MAX(contentid) AS contentid FROM contents')
-			id = int(1 + self.c.fetchone().contentid)
+			id = int(1 + self.c.fetchone()["contentid"])
 		self.c.execute('SELECT MAX(id) AS ver FROM contents')
-		ver = int(1 + self.c.fetchone().ver)
+		ver = int(1 + self.c.fetchone()["ver"])
 		# Create record
 		createdate = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
 		sql = '''INSERT INTO "contents" (id, contentid, content, label,
-			type, parent, startver, createdate) VALUES ("%s" ,"%s" ,
-			"%s" ,"%s" ,"%s" ,"%s" , "%s", "%s" )'''
-		sql = sql % (ver, id, content, label, type, parent, ver, createdate)
-		self.c.execute(sql)
+			type, parent, startver, createdate) VALUES (? ,? ,
+			? ,? ,? ,? , ?, ? )'''
+		where = (ver,id,content,label,type,parent,ver,createdate)
+		self.c.execute(sql, where)
+		self.conn.cursor()
 		self.commit()
 		return self.read(id)
 
@@ -176,15 +145,15 @@ class cntnt:
 			raise self.ContentHasChilds, "Content(%s) has %s childs" % (id, len(childs))
 		# Delete record
 		deletedate = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-		sql = '''UPDATE contents SET deletedate = "%s" WHERE contentid = "%s"
-			AND deletedate IS NULL''' % (deletedate, id)
-		self.c.execute(sql)
+		c = self.conn.cursor()
+		self.c.execute('''UPDATE contents SET deletedate=? WHERE contentid=?
+			AND deletedate IS NULL''', ((deletedate,id)))
 		self.commit()
 		return id
 
 	def deepDelete(self, id):
 		# FIXME: This function deletes pointer targets instead of
-		# pointewr contetnts itself.
+		# pointer contetnts itself.
 
 		# We must use pointedFrom key from read contents.
 		ids = []
@@ -210,9 +179,9 @@ class cntnt:
 		cnt = self.read(id)
 		self.delete(id, force = True)
 		if content: cnt["content"] = content
-		if type: cnt["type"] = type
-		if parent: cnt["parent"] = parent
-		if label: cnt["label"] = label
+		if type: cnt["type"] = str(type)
+		if parent: cnt["parent"] = int(parent)
+		if label: cnt["label"] = str(label)
 		# FIXME: if new label exist or label/type names are not valid
 		# content will be deleted only
 		return self.create(content=content, type=type, parent=parent,
@@ -226,7 +195,7 @@ class cntnt:
 			for childid in childids:
 				ids.extend(self.getCPath(residual, childid))
 		else:
-   			ids = self.executeBranchExpr(parent, path)
+			ids = self.executeBranchExpr(parent, path)
 		return ids
 
 	def executeBranchExpr(self, parent, expr):
@@ -257,11 +226,12 @@ def tree(cnt, id=0, level=0):
 
 def usage():
 	print """Usage:
+	 -[c|r|u|d|D|t] --id= --content= --label= --type= --parent= --path=
 """
 
 def main():
 	import getopt
-	cnt = cntnt('hede.db')
+	cnt = cntnt('cntnt.db3')
 	try:
 		opts, args = getopt.getopt(sys.argv[1:], "ho:crudDt", ["help",
 			"output=", "id=", "content=", "label=", "type=", "parent=",
@@ -289,12 +259,12 @@ def main():
 		if o == "-d": crud = "delete"
 		if o == "-D": crud = "deepdelete"
 		if o == "-t": crud = "tree"
-		if o == "--id": id = a
-		if o == "--content": content = a
-		if o == "--label": label = a
-		if o == "--type": type = a
-		if o == "--parent": parent = a
-		if o == "--path": path = a
+		if o == "--id": id = int(a)
+		if o == "--content": content = str(a)
+		if o == "--label": label = str(a)
+		if o == "--type": type = str(a)
+		if o == "--parent": parent = int(a)
+		if o == "--path": path = str(a)
 
 	if crud == "create":
 		if "" in (content, type, parent):
