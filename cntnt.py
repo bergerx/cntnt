@@ -66,16 +66,20 @@ class cntnt:
 							 pointedFrom = id)
 		return row
 
-	def readChilds(self, id, label = "", type = "", followPointer = True,
-				   followPointerSelf = True):
+	def readChilds(self, id, label = None, type = None, content = None,
+				   followPointer = True, followPointerSelf = True):
 		# followPointerSelf will be needed for reading any pointers
 		# child contents.
 		# followPointer will be needed for deep delete.
 		sqlexpr = ""
-		if label != "":
-			sqlexpr += 'AND label = "%s"' % label
-		if type != "":
-			sqlexpr += 'AND type = "%s"' % type
+		# FIXME: sql injection risc for label and type. Using directly
+		# substitution for variables in sql query.
+		if label:
+			sqlexpr += ' AND label = "%s"' % label
+		if type:
+			sqlexpr += ' AND type = "%s"' % type
+		if content:
+			sqlexpr += ' AND content = "%s"' % content
 		if followPointerSelf:
 			myself = self.read(id)
 			id = myself["contentid"]
@@ -109,7 +113,6 @@ class cntnt:
 				raise self.ContentExistsError, "Content already exists which has this id:%s" % id
 		except self.ContentNotExistsError:
 			pass
-
 
 	def create(self, content="", type="", parent=0, label="", id=0):
 		# TODO: If declared a "label" for parent's type definition for
@@ -188,29 +191,76 @@ class cntnt:
 			label=label, id=id)
 
 	def getCPath(self, path, parent = 0):
-		ids = []
-		if path.count("."):
-			branchExpr, residual = path.split(".",1)
-			childids = self.executeBranchExpr(parent, branchExpr)
-			for childid in childids:
-				ids.extend(self.getCPath(residual, childid))
-		else:
-			ids = self.executeBranchExpr(parent, path)
-		return ids
+		# TODO: Implement pylex lib for this parsing function
+		
+		# FIXME: Not working for CPaths which includes parenthesis,
+		# and code looks like cryptic.
+		
+		# Some exaple CPaths:
+		# _basic._views.__view(_name=view1)
+		# _basic._views.__view(__text=view1)
+		# _basic._views.__view(@view1)
+		# _basic._views.__view(_type._name=type1)
+		# _basic._views.__view(_type.@type1)
+		# _basic._views.__view.@goruntu1
+		# _basic._views.__view._type.@type1
+		def intersection(list1, list2):
+			return [i for i in list1 if i in list2]
+		parsedExprs = self.getBranchExpr(path)
+		for i, parsedExpr in enumerate(parsedExprs):
+			if i>=1: parsedExpr['parent'] = parsedExprs[i-1]['contentids']
+			else: parsedExpr['parent'] = [parent]
+			children = self.calculateExprChilds(parsedExpr)
+			# Calculate children from exression given in paren
+			if parsedExpr['paren']:
+				parenChildren = []
+				if i>=1:
+					parsedExpr['paren'][0]['parent'] = children
+				else:
+					parsedExpr['paren'][0]['parent'] = [parent]
+				for p in parsedExpr['paren']:
+					parenChildren.extend(self.calculateExprChilds(p))
+				children = intersection(children, parenChildren)
+			parsedExpr['contentids']=children
+		return parsedExprs[-1]['contentids']
 
-	def executeBranchExpr(self, parent, expr):
-		# FIXME: Not fully implemented yet
+	def calculateExprChilds(self, parsedExpr):
+		results = []
+		for p in parsedExpr['parent']:
+			content=None
+			if parsedExpr['type'] and parsedExpr['type'].count('='):
+				type, content = parsedExpr['type'].split('=')
+			else:
+				type = parsedExpr['type']
+			if parsedExpr['label'] and parsedExpr['label'].count('='):
+				label, content = parsedExpr['label'].split('=')
+			else:
+				label = parsedExpr['label']
+			contents = self.readChilds(
+					p, type = type, label = label,
+					content = content or parsedExpr['content'])
+			results.extend([item['contentid'] for item in contents])
+		return results
+
+	def getBranchExpr(self, path):
 		contents = []
-		# Type expression: "__typename[n]" or "__typename"
-		if len(expr) > 2 and expr[0:2] == "__":
-			# TODO: Not implenmented type expressions
-			type = expr[2:]
-			contents = self.readChilds(parent, type = type)
-		#Label expression: "_labelname"
-		if len(expr) > 1 and expr[0] == "_":
-			label = expr[1:]
-			contents = self.readChilds(parent, label = label)
-		return [c["contentid"] for c in contents]
+		if path[0] != '.':
+			path = '.' + path
+		for all, text, paren in re.findall('\.(([^(.]*)(\([^)]*\))?)', path):
+			# Type expression: "__typename[n]" or "__typename"
+			result = {'parent':[], 'type':None, 'label':None, 'content':None,
+					  'paren':[], 'parenChilds':[], 'contentids':[]}
+			if len(text) > 2 and text[0:2] == "__":
+				result['type'] = text[2:]
+			#Label expression: "_labelname"
+			elif len(text) > 1 and text[0] == "_":
+				result['label'] = text[1:]
+			elif len(text) > 1 and text[0] == "@":
+				result['content'] = text[1:]
+			if paren:
+				result['paren'] = self.getBranchExpr(paren[1:-1])
+			contents.append(result)
+		return contents
 
 # here after there is only command line functions
 def tree(cnt, id=0, level=0):
