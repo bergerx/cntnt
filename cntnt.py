@@ -42,6 +42,41 @@ class cntnt:
 		self.conn = sqlite3.connect(dbfile)
 		self.conn.row_factory = dict_factory
 		self.c = self.conn.cursor(factory=CntntCursor)
+		try:
+			self.read(0)
+		except self.ContentNotExistsError:
+			# FIXME: I couldnt use self.create() because parent=-1
+			self.c.execute("INSERT INTO contents VALUES(0,0,'root','root','',0,-1,0,NULL,20070818100000,NULL);")
+		# Check for type definitions
+		types = self.getCPath("_basic._types")
+		if not types:
+			# Create basic branc if not exists
+			basic = self.getCPath("_basic")
+			if not basic:
+				basic = self.create(content="basic", type="root", parent=0,
+									label="basic")["contentid"]
+			# Create basic branch if not exists
+			types = self.create(content="", type="types", parent=basic,
+								label="types")["contentid"]
+			# Create root records type definition
+			self.addType("root", fields=[], strict=False)
+			# Create type definitions for "type"
+			self.addType("field",
+						 fields=[["name", "1", "text"],
+								 ["count", "?", "text"],
+								 ["type", "1", "text"]],
+						 strict=True)
+			self.addType("fields",
+						 fields=[["types", "*", "field"]],
+						 strict=True)
+			self.addType("type",
+						 fields=[["name", "1", "text"],
+								 ["extFrom", "?", "text"],
+								 ["fields", "?", "fields"]],
+						 strict=True)
+			self.addType("types",
+						 fields=[["types", "1", "types"]],
+						 strict=True)
 
 	def commit(self):
 		self.conn.commit()
@@ -224,6 +259,24 @@ class cntnt:
 											 content = content))
 			parents = [item['contentid'] for item in childs]
 		return parents
+
+	def addType(self, name, fields=[], extFrom="", strict=False):
+		# Get id of Types branch
+		id = self.getCPath("_basic._types")[0]
+		# Create a new type record
+		typeid = self.create(content="", type="type", parent=id)["contentid"]
+		# Create childrens (name, strict, extfrom, fields) of type record
+		self.create(content=name, type="text", parent=typeid, label="name")
+		self.create(content=str(strict), type="bool", parent=typeid, label="strict")
+		if extFrom: self.create(content=extFrom, type="", parent=typeid, label="extFrom")
+		if fields: fieldsid = self.create(content="", type="fields", parent=typeid, label="fields")["contentid"]
+		for name, count, type in fields:
+			# Create field record for each field
+			fieldid = self.create(content="", type="field", parent=fieldsid)["contentid"]
+			# Create childrens(name, count, type) for field record
+			self.create(content=name, type="text", parent=fieldid, label="name")
+			if count: self.create(content=count, type="text", parent=fieldid, label="count")
+			self.create(content=type, type="text", parent=fieldid, label="type")
 
 # here after there is only command line functions
 def tree(cnt, id=0, level=0):

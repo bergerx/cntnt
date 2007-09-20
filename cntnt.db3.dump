@@ -10,4 +10,3 @@ CREATE TABLE "contents" (
 	endver INTEGER,
 	createdate TEXT NOT NULL,
 	deletedate TEXT);
-INSERT INTO contents VALUES(0,0,'root','root','',0,-1,0,NULL,20070818100000,NULL);
