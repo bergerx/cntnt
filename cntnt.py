@@ -243,6 +243,7 @@ def usage():
 		print "%18s   %s" % (command, params)
 	printUsageLine("Create", "-c --content --type --parent [--label]")
 	printUsageLine("Read", "-r (--id|--path)")
+	printUsageLine("Read Childs", "-R --id")
 	printUsageLine("Update", "-u --id [--content] [--type] [--parent] [--label]")
 	printUsageLine("Delete", "-d --id")
 	printUsageLine("Recursive Delete", "-D --id")
@@ -252,7 +253,7 @@ def main():
 	import getopt
 	cnt = cntnt('cntnt.db3')
 	try:
-		opts, args = getopt.getopt(sys.argv[1:], "ho:crudDt", ["help",
+		opts, args = getopt.getopt(sys.argv[1:], "ho:crRudDt", ["help",
 			"output=", "id=", "content=", "label=", "type=", "parent=",
 			"path="])
 	except getopt.GetoptError:
@@ -274,6 +275,7 @@ def main():
 		if o in ("-o", "--output"): print a
 		if o == "-c": crud = "create"
 		if o == "-r": crud = "read"
+		if o == "-R": crud = "readchilds"
 		if o == "-u": crud = "update"
 		if o == "-d": crud = "delete"
 		if o == "-D": crud = "deepdelete"
@@ -294,6 +296,8 @@ def main():
 	elif crud == "read":
 		if path: print cnt.getCPath(path)
 		if id: print cnt.read(id)
+	elif crud == "readchilds":
+		for child in cnt.readChilds(id): print child
 	elif crud == "tree": tree(cnt, id)
 	elif crud == "update":
 		if id == 0:
