@@ -191,76 +191,39 @@ class cntnt:
 			label=label, id=id)
 
 	def getCPath(self, path, parent = 0):
-		# TODO: Implement pylex lib for this parsing function
-		
+		# TODO: Implement pylex lib for parsing CPath
+
 		# FIXME: Not working for CPaths which includes parenthesis,
 		# and code looks like cryptic.
-		
+
 		# Some exaple CPaths:
-		# _basic._views.__view(_name=view1)
-		# _basic._views.__view(__text=view1)
-		# _basic._views.__view(@view1)
-		# _basic._views.__view(_type._name=type1)
-		# _basic._views.__view(_type.@type1)
-		# _basic._views.__view.@goruntu1
-		# _basic._views.__view._type.@type1
-		def intersection(list1, list2):
-			return [i for i in list1 if i in list2]
-		parsedExprs = self.getBranchExpr(path)
-		for i, parsedExpr in enumerate(parsedExprs):
-			if i>=1: parsedExpr['parent'] = parsedExprs[i-1]['contentids']
-			else: parsedExpr['parent'] = [parent]
-			children = self.calculateExprChilds(parsedExpr)
-			# Calculate children from exression given in paren
-			if parsedExpr['paren']:
-				parenChildren = []
-				if i>=1:
-					parsedExpr['paren'][0]['parent'] = children
-				else:
-					parsedExpr['paren'][0]['parent'] = [parent]
-				for p in parsedExpr['paren']:
-					parenChildren.extend(self.calculateExprChilds(p))
-				children = intersection(children, parenChildren)
-			parsedExpr['contentids']=children
-		return parsedExprs[-1]['contentids']
+		# _basic._views.__view(_name=view1)  # Not yet
+		# _basic._views.__view(__text=view1) # Not yet
+		# _basic._views.__view(@view1)       # Not yet
+		# _basic._views.__view(_type._name=type1) # Not yet
+		# _basic._views.__view(_type.@type1) # Not yet
+		# _basic._views                      # Supported
+		# _basic._views.__view.              # Supported
+		# _basic._views.__view.@goruntu1     # Supported
+		# _basic._views.__view._type.@type1  # Supported
 
-	def calculateExprChilds(self, parsedExpr):
-		results = []
-		for p in parsedExpr['parent']:
-			content=None
-			if parsedExpr['type'] and parsedExpr['type'].count('='):
-				type, content = parsedExpr['type'].split('=')
-			else:
-				type = parsedExpr['type']
-			if parsedExpr['label'] and parsedExpr['label'].count('='):
-				label, content = parsedExpr['label'].split('=')
-			else:
-				label = parsedExpr['label']
-			contents = self.readChilds(
-					p, type = type, label = label,
-					content = content or parsedExpr['content'])
-			results.extend([item['contentid'] for item in contents])
-		return results
-
-	def getBranchExpr(self, path):
-		contents = []
-		if path[0] != '.':
-			path = '.' + path
-		for all, text, paren in re.findall('\.(([^(.]*)(\([^)]*\))?)', path):
+		parents = [parent]
+		branchExprs = path.split('.')
+		# For each branch exression (be)
+		for be in branchExprs:
+			type, label, content = None, None, None
 			# Type expression: "__typename[n]" or "__typename"
-			result = {'parent':[], 'type':None, 'label':None, 'content':None,
-					  'paren':[], 'parenChilds':[], 'contentids':[]}
-			if len(text) > 2 and text[0:2] == "__":
-				result['type'] = text[2:]
-			#Label expression: "_labelname"
-			elif len(text) > 1 and text[0] == "_":
-				result['label'] = text[1:]
-			elif len(text) > 1 and text[0] == "@":
-				result['content'] = text[1:]
-			if paren:
-				result['paren'] = self.getBranchExpr(paren[1:-1])
-			contents.append(result)
-		return contents
+			if len(be) > 2 and be[0:2] == "__": type = be[2:]
+			# Label expression: "_labelname"
+			elif len(be) > 1 and be[0] == "_": label = be[1:]
+			# Content expression: "@content"
+			elif len(be) > 1 and be[0] == "@": content = be[1:]
+			childs = []
+			for p in parents:
+				childs.extend(self.readChilds(p, type = type, label = label,
+											 content = content))
+			parents = [item['contentid'] for item in childs]
+		return parents
 
 # here after there is only command line functions
 def tree(cnt, id=0, level=0):
@@ -275,9 +238,15 @@ def tree(cnt, id=0, level=0):
 		tree(cnt, child["contentid"], level+1)
 
 def usage():
-	print """Usage:
-	 -[c|r|u|d|D|t] --id= --content= --label= --type= --parent= --path=
-"""
+	print "Usage:"
+	def printUsageLine(command, params):
+		print "%18s   %s" % (command, params)
+	printUsageLine("Create", "-c --content --type --parent [--label]")
+	printUsageLine("Read", "-r (--id|--path)")
+	printUsageLine("Update", "-u --id [--content] [--type] [--parent] [--label]")
+	printUsageLine("Delete", "-d --id")
+	printUsageLine("Recursive Delete", "-D --id")
+	printUsageLine("Tree", "-t [--id]")
 
 def main():
 	import getopt
