@@ -59,22 +59,22 @@ class cntnt:
 			types = self.create(content="", type="types", parent=basic,
 								label="types")["contentid"]
 			# Create root records type definition
-			self.addType("root", fields=[], strict=False)
+			self.createType("root", fields=[], strict=False)
 			# Create type definitions for "type"
-			self.addType("field",
+			self.createType("field",
 						 fields=[["name", "1", "text"],
 								 ["count", "?", "text"],
 								 ["type", "1", "text"]],
 						 strict=True)
-			self.addType("fields",
+			self.createType("fields",
 						 fields=[["types", "*", "field"]],
 						 strict=True)
-			self.addType("type",
+			self.createType("type",
 						 fields=[["name", "1", "text"],
 								 ["extFrom", "?", "text"],
 								 ["fields", "?", "fields"]],
 						 strict=True)
-			self.addType("types",
+			self.createType("types",
 						 fields=[["types", "1", "types"]],
 						 strict=True)
 
@@ -227,10 +227,8 @@ class cntnt:
 
 	def getCPath(self, path, parent = 0):
 		# TODO: Implement pylex lib for parsing CPath
-
 		# FIXME: Not working for CPaths which includes parenthesis,
 		# and code looks like cryptic.
-
 		# Some exaple CPaths:
 		# _basic._views.__view(_name=view1)  # Not yet
 		# _basic._views.__view(__text=view1) # Not yet
@@ -241,7 +239,6 @@ class cntnt:
 		# _basic._views.__view.              # Supported
 		# _basic._views.__view.@goruntu1     # Supported
 		# _basic._views.__view._type.@type1  # Supported
-
 		parents = [parent]
 		branchExprs = path.split('.')
 		# For each branch exression (be)
@@ -260,7 +257,7 @@ class cntnt:
 			parents = [item['contentid'] for item in childs]
 		return parents
 
-	def addType(self, name, fields=[], extFrom="", strict=False):
+	def createType(self, name, fields=[], extFrom="", strict=False):
 		# Get id of Types branch
 		id = self.getCPath("_basic._types")[0]
 		# Create a new type record
