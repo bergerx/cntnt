@@ -53,10 +53,10 @@ class cntnt:
 			# Create basic branc if not exists
 			basic = self.getCPath("_basic")
 			if not basic:
-				basic = self.create(content="basic", type="root", parent=0,
+				basic = self.create(parent=0, content="basic", type="root",
 									label="basic")["contentid"]
 			# Create basic branch if not exists
-			types = self.create(content="", type="types", parent=basic,
+			types = self.create(parent=basic, content="", type="types",
 								label="types")["contentid"]
 			# Create root records type definition
 			self.createType("root", fields=[], strict=False)
@@ -127,7 +127,7 @@ class cntnt:
 									followPointer=followPointer))
 		return result
 
-	def checkForCreate(self, content="", type="", parent=0, label="", id=0):
+	def checkForCreate(self, type="", parent=None, label="", id=None):
 		# TODO: Check if type is defined
 		# Check if label and type names are valid
 		def checkName(string):
@@ -137,7 +137,7 @@ class cntnt:
 		if not checkName(label):
 			raise self.LabelNameError, 'Error in label name validation: "%s"' % label
 		# Check if parent exists (exception for root record)
-		not id and self.read(parent)
+		not id and parent and self.read(parent)
 		self.c.execute('''SELECT * FROM contents
 			WHERE label = ? AND parent = ? AND deletedate IS NULL''', (label, parent))
 		if label != "" and self.c.fetchone():
@@ -149,14 +149,13 @@ class cntnt:
 		except self.ContentNotExistsError:
 			pass
 
-	def create(self, content="", type="", parent=0, label="", id=0):
+	def create(self, parent, content="", type="", label="", id=None):
 		# TODO: If declared a "label" for parent's type definition for
 		# this type of content use that label as default.
 
 		# Do creation parameter checks, raises exception on parameter
 		# errors
-		self.checkForCreate(content=content, type=type, parent=parent,
-			label=label, id=id)
+		self.checkForCreate(type=type, parent=parent, label=label, id=id)
 		# Get next version number(id) if its not given
 		if not id:
 			self.c.execute('SELECT MAX(contentid) AS contentid FROM contents')
@@ -204,14 +203,14 @@ class cntnt:
 		# Return a list of deleted ids
 		return ids
 
-	def update(self, id, content="", type="", parent=0, label=""):
+	def update(self, id, content=None, type=None, parent=None, label=None):
 		# Update not allowed for root
 		if not id: return self.read(0)
 		# Do creation parameter checks, raises exception on parameter
 		# errors
 		try:
-			self.checkForCreate(content=content, type=type,
-				parent=parent, label=label, id=id)
+			self.checkForCreate(type=type, parent=parent or 0, label=label,
+								id=id)
 		except self.ContentExistsError:
 			pass
 		cnt = self.read(id)
@@ -222,13 +221,17 @@ class cntnt:
 		if label: cnt["label"] = str(label)
 		# FIXME: if new label exist or label/type names are not valid
 		# content will be deleted only
-		return self.create(content=content, type=type, parent=parent,
+		return self.create(parent=parent, content=content, type=type,
 			label=label, id=id)
+
+	def move(self, id, newparent):
+		self.update(id, parent=0,)
 
 	def getCPath(self, path, parent = 0):
 		# TODO: Implement pylex lib for parsing CPath
 		# FIXME: Not working for CPaths which includes parenthesis,
 		# and code looks like cryptic.
+		# _label, __type[], *[], @content
 		# Some exaple CPaths:
 		# _basic._views.__view(_name=view1)  # Not yet
 		# _basic._views.__view(__text=view1) # Not yet
@@ -261,19 +264,21 @@ class cntnt:
 		# Get id of Types branch
 		id = self.getCPath("_basic._types")[0]
 		# Create a new type record
-		typeid = self.create(content="", type="type", parent=id)["contentid"]
+		typeid = self.create(parent=id, content="", type="type")["contentid"]
 		# Create childrens (name, strict, extfrom, fields) of type record
-		self.create(content=name, type="text", parent=typeid, label="name")
-		self.create(content=str(strict), type="bool", parent=typeid, label="strict")
-		if extFrom: self.create(content=extFrom, type="", parent=typeid, label="extFrom")
-		if fields: fieldsid = self.create(content="", type="fields", parent=typeid, label="fields")["contentid"]
+		self.create(parent=typeid, content=name, type="text", label="name")
+		self.create(parent=typeid, content=str(strict), type="bool", label="strict")
+		if extFrom: self.create(parent=typeid, content=extFrom, type="", label="extFrom")
+		# TODO: We should create an other function to create field records
+		if fields: fieldsid = self.create(parent=typeid, content="", type="fields", label="fields")["contentid"]
 		for name, count, type in fields:
 			# Create field record for each field
-			fieldid = self.create(content="", type="field", parent=fieldsid)["contentid"]
+			fieldid = self.create(parent=fieldsid, content="", type="field")["contentid"]
 			# Create childrens(name, count, type) for field record
-			self.create(content=name, type="text", parent=fieldid, label="name")
-			if count: self.create(content=count, type="text", parent=fieldid, label="count")
-			self.create(content=type, type="text", parent=fieldid, label="type")
+			self.create(parent=fieldid, content=name, type="text", label="name")
+			if count: self.create(parent=fieldid, content=count, type="text", label="count")
+			self.create(parent=fieldid, content=type, type="text", label="type")
+		return typeid
 
 # here after there is only command line functions
 def tree(cnt, id=0, level=0):
@@ -341,7 +346,7 @@ def main():
 		if "" in (content, type, parent):
 			print "You must supply --content, --type and --parent"
 			sys.exit(0)
-		print cnt.create(content=content, type=type, parent=parent,
+		print cnt.create(parent=parent, content=content, type=type,
 							 label=label, id=id)
 	elif crud == "read":
 		if path: print cnt.getCPath(path)
