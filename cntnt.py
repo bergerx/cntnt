@@ -203,7 +203,8 @@ class cntnt:
 		# Return a list of deleted ids
 		return ids
 
-	def update(self, id, content=None, type=None, parent=None, label=None):
+	def update(self, id, content="", type="", parent=None, label=""):
+		print self.read(id)
 		# Update not allowed for root
 		if not id: return self.read(0)
 		# Do creation parameter checks, raises exception on parameter
@@ -221,11 +222,11 @@ class cntnt:
 		if label: cnt["label"] = str(label)
 		# FIXME: if new label exist or label/type names are not valid
 		# content will be deleted only
-		return self.create(parent=parent, content=content, type=type,
-			label=label, id=id)
+		return self.create(parent=cnt["parent"], content=cnt["content"],
+						   type=cnt["type"], label=cnt["label"], id=id)
 
 	def move(self, id, newparent):
-		self.update(id, parent=0,)
+		return self.update(id, parent=newparent)
 
 	def getCPath(self, path, parent = 0):
 		# TODO: Implement pylex lib for parsing CPath
@@ -265,7 +266,7 @@ class cntnt:
 		id = self.getCPath("_basic._types")[0]
 		# Create a new type record
 		typeid = self.create(parent=id, content="", type="type")["contentid"]
-		# Create childrens (name, strict, extfrom, fields) of type record
+		# Create children (name, strict, extfrom, fields) of type record
 		self.create(parent=typeid, content=name, type="text", label="name")
 		self.create(parent=typeid, content=str(strict), type="bool", label="strict")
 		if extFrom: self.create(parent=typeid, content=extFrom, type="", label="extFrom")
@@ -274,7 +275,7 @@ class cntnt:
 		for name, count, type in fields:
 			# Create field record for each field
 			fieldid = self.create(parent=fieldsid, content="", type="field")["contentid"]
-			# Create childrens(name, count, type) for field record
+			# Create children (name, count, type) for field record
 			self.create(parent=fieldid, content=name, type="text", label="name")
 			if count: self.create(parent=fieldid, content=count, type="text", label="count")
 			self.create(parent=fieldid, content=type, type="text", label="type")
