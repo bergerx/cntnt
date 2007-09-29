@@ -113,11 +113,11 @@ def p_branchexpression(p):
 	p[0] = p[1]
 
 def p_branchexpression(p):
-	'branchexpression | paren'
+	'branchexpression : paren'
 	p[0] = p[1]
 
 def p_branchexpression(p):
-	'branchexpression | prefixedname paren'
+	'branchexpression : prefixedname paren'
 	p[0] = "%s%s" % (p[1], p[2])
 
 # Error rule for syntax errors
@@ -129,10 +129,10 @@ testCPath = "_basic._views.__view(_name=hede and _type=1).*.__type"
 
 # lexical analyzer
 lex.lex()
-test(testCPath)
+#test(testCPath)
 
 # Build the parser
-yacc.yacc()
+yacc.yacc(debug=1)
 
 # Use this if you want to build the parser using SLR instead of LALR
 #yacc.yacc(method="SLR")
