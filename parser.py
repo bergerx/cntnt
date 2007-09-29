@@ -65,6 +65,9 @@ def test(data):
     branchexpression : prefixedname
                      | paren
                      | prefixedname paren
+
+	cpath            : cpath DOT branchexpression
+	                 | branchexpression
 """
 
 def p_prefix(p):
@@ -109,16 +112,21 @@ def p_paren(p):
 	p[0] = "(%s)" % p[2]
 
 def p_branchexpression(p):
-	'branchexpression : prefixedname'
+	'''branchexpression : prefixedname
+					    | paren'''
 	p[0] = p[1]
 
-def p_branchexpression(p):
-	'branchexpression : paren'
-	p[0] = p[1]
-
-def p_branchexpression(p):
+def p_branchexpression_prefixedname_paren(p):
 	'branchexpression : prefixedname paren'
 	p[0] = "%s%s" % (p[1], p[2])
+
+def p_cpath_dot_branchexpr(p):
+	'cpath : cpath DOT branchexpression'
+	p[0] = "$s.%s" % (p[1], p[2])
+
+def p_cpath_branchexpr(p):
+	'cpath : branchexpression'
+	p[0] = p[1]
 
 # Error rule for syntax errors
 def p_error(p):
@@ -128,7 +136,7 @@ def p_error(p):
 testCPath = "_basic._views.__view(_name=hede and _type=1).*.__type"
 
 # lexical analyzer
-lex.lex()
+lex.lex(debug=1)
 #test(testCPath)
 
 # Build the parser
@@ -137,4 +145,4 @@ yacc.yacc(debug=1)
 # Use this if you want to build the parser using SLR instead of LALR
 #yacc.yacc(method="SLR")
 
-print yacc.parse(test)
+print yacc.parse(test, debug=1)
