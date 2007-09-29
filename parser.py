@@ -1,44 +1,46 @@
 #!/usr/bin/python
-
 import ply.lex as lex
 import ply.yacc as yacc
 
 
-class MyLexer:
-	tokens = (
-		'DOT',				# .
-		'LABEL', 'TYPE',	# _	 __
-		'NAME',				# [A-Za-z0-9-]+
-		'LPAREN', 'RPAREN', # ( )
-		'EQUAL',			# =
-		'AND', 'OR',		# and or
-	)
-	reserved = {
-		'and' : 'AND',
-		'or' : 'OR'
-	}
-	t_DOT = r'\.'
-	t_LABEL = r'_'
-	t_TYPE = r'__'
-	t_LPAREN = r'\('
-	t_RPAREN = r'\)'
-	t_EQUAL = r'='
-	t_ignore = ' \t'
-	def t_NAME(self, t):
-		r'([A-Za-z0-9-]+)|\*'
-		t.type = self.reserved.get(t.value,'NAME')
-		return t
-	def t_error(self, t):
-		print "Illegal char '%s'" % t.value
-		t.lexer.skip(1)
-	def build(self, **kwargs):
-		self.lexer = lex.lex(object=self, **kwargs)
-	def test(self, data):
-		self.lexer.input(data)
-		while 1:
-			tok = self.lexer.token()
-			if not tok: break
-			print tok
+# FIXME: Not working
+tokens = (
+	'DOT',				# .
+	'LABEL', 'TYPE',	# _	 __
+	'NAME',				# [A-Za-z0-9-]+
+	'LPAREN', 'RPAREN', # ( )
+	'EQUAL',			# =
+	'AND', 'OR',		# and or
+)
+
+reserved = {
+	'and' : 'AND',
+	'or' : 'OR'
+}
+
+t_DOT = r'\.'
+t_LABEL = r'_'
+t_TYPE = r'__'
+t_LPAREN = r'\('
+t_RPAREN = r'\)'
+t_EQUAL = r'='
+t_ignore = ' \t'
+
+def t_NAME(t):
+	r'([A-Za-z0-9-]+)|\*'
+	t.type = reserved.get(t.value,'NAME')
+	return t
+
+def t_error(t):
+	print "Illegal char '%s'" % t.value
+	lex.skip(1)
+
+def test(data):
+	lex.input(data)
+	while 1:
+		tok = lex.token()
+		if not tok: break
+		print tok
 
 # parser bnf
 
@@ -54,10 +56,8 @@ class MyLexer:
     queryexprunit    : prefixedname
                      | equation
 
-    operator         : AND
-                     | OR
-
-    inparen          : queryexprunit operator queryexprunit
+    inparen          : queryexprunit AND queryexprunit
+                     | queryexprunit OR queryexprunit
                      | queryexprunit
 
     paren            : LPAREN inparen RPAREN
@@ -67,13 +67,10 @@ class MyLexer:
                      | prefixedname paren
 """
 
-def p_prefix_type(p):
-	'prefix : TYPE'
-	p[0] = "__"
-
-def p_prefix_label(p):
-	'prefix : LABEL'
-	p[0] = "_"
+def p_prefix(p):
+	'''prefix : TYPE
+			  | LABEL'''
+	p[0] = p[1]
 
 def p_prefixedname_prefix_name(p):
 	'prefixedname : prefix NAME'
@@ -95,17 +92,13 @@ def p_queryexprunit_equation(p):
 	'queryexprunit : equation'
 	p[0] = p[1]
 
-def p_operator_and(p):
-	'operator : AND'
-	p[0] = "and"
-
-def p_operator_or(p):
-	'operator : OR'
-	p[0] = "or"
-
 def p_inparen_operator(p):
-	'inparen : queryexprunit operator queryexprunit'
-	p[0] = "%s %s %s" % (p[1], p[2], p[3])
+	'''inparen : queryexprunit AND queryexprunit
+			   | queryexprunit OR queryexprunit'''
+	if p[2] == "and":
+		p[0] = "%s and %s" % (p[1], p[3])
+	elif p[2] == "or":
+		p[0] = "%s or %s" % (p[1], p[3])
 
 def p_inparen_queryexprunit(p):
 	'inparen : queryexprunit'
@@ -131,17 +124,12 @@ def p_branchexpression(p):
 def p_error(p):
 	print "Syntax error in input!"
 
-
-
-#test = "test.(deneme)"
-test = "_basic._views.__view(_name=hede and _type=1).*.__type"
-
+#testCPath = "test.(deneme)"
+testCPath = "_basic._views.__view(_name=hede and _type=1).*.__type"
 
 # lexical analyzer
-m = MyLexer()
-m.build()
-m.test(test)
-
+lex.lex()
+test(testCPath)
 
 # Build the parser
 yacc.yacc()
