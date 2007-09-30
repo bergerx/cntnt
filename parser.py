@@ -87,12 +87,9 @@ def p_equation(p):
 	'equation : prefixedname EQUAL NAME'
 	p[0] = "%s=%s" % (p[1], p[3])
 
-def p_queryexprunit_prefixedname(p):
-	'queryexprunit : prefixedname'
-	p[0] = p[1]
-
-def p_queryexprunit_equation(p):
-	'queryexprunit : equation'
+def p_queryexprunit(p):
+	'''queryexprunit : prefixedname
+					 | equation'''
 	p[0] = p[1]
 
 def p_inparen_operator(p):
@@ -145,4 +142,4 @@ yacc.yacc(debug=1)
 # Use this if you want to build the parser using SLR instead of LALR
 #yacc.yacc(method="SLR")
 
-print yacc.parse(test, debug=1)
+print yacc.parse(testCPath, debug=1)
