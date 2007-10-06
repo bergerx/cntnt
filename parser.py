@@ -2,12 +2,13 @@
 import ply.lex as lex
 import ply.yacc as yacc
 
-
 # FIXME: Not working
 tokens = (
 	'DOT',				# .
-	'LABEL', 'TYPE',	# _	 __
-	'NAME',				# [A-Za-z0-9-]+
+	'LABELPREFIX',		# _
+	'TYPEPREFIX',		# __
+	'WORD',				# [A-Za-z0-9]+
+	'STAR',				# *
 	'LPAREN', 'RPAREN', # ( )
 	'EQUAL',			# =
 	'AND', 'OR',		# and or
@@ -19,16 +20,17 @@ reserved = {
 }
 
 t_DOT = r'\.'
-t_LABEL = r'_'
-t_TYPE = r'__'
+t_LABELPREFIX = r'_'
+t_TYPEPREFIX = r'__'
+t_STAR = r'\*'
 t_LPAREN = r'\('
 t_RPAREN = r'\)'
 t_EQUAL = r'='
-t_ignore = ' \t'
+t_ignore = ' \t\n'
 
-def t_NAME(t):
-	r'([A-Za-z0-9-]+)|\*'
-	t.type = reserved.get(t.value,'NAME')
+def t_WORD(t):
+	r'[A-Za-z0-9]+'
+	t.type = reserved.get(t.value,'WORD')
 	return t
 
 def t_error(t):
@@ -45,95 +47,102 @@ def test(data):
 # parser bnf
 
 """
-    prefix           : TYPE
-                     | LABEL
 
-    prefixedname     : prefix NAME
-                     | NAME
+_basic._views.__view(_name.__type=query and _type=1).*.__type
 
-    equation         : prefixedname EQUAL NAME
+TOKENS:
+-------
+DOT, LABELPREFIX, TYPEPREFIX, WORD, STAR, LPAREN, RPAREN, EQUAL, AND, OR
 
-    queryexprunit    : prefixedname
-                     | equation
+PARSER BNF:
+-----------
+type : LABELPREFIX WORD
 
-    inparen          : queryexprunit AND queryexprunit
-                     | queryexprunit OR queryexprunit
-                     | queryexprunit
+label : TYPEPREFIX WORD
 
-    paren            : LPAREN inparen RPAREN
+name : type
+	 | label
 
-    branchexpression : prefixedname
-                     | paren
-                     | prefixedname paren
+equation : name EQUAL WORD
+		 | cpath equal WORD
 
-	cpath            : cpath DOT branchexpression
-	                 | branchexpression
+inparen : inparen AND cpath
+		| inparen OR cpath
+
+paren : LPAREN inparen RPAREN
+
+branchexpr : name
+		   | STAR
+		   | name paren
+		   | STAR paren
+
+cpath : branchexpr DOT cpath | branchexpr
 """
 
-def p_prefix(p):
-	'''prefix : TYPE
-			  | LABEL'''
+def p_cpath_dot(p):
+	'''cpath : cpath DOT branchexpr'''
+	p[0] = p[1] + "." + p[3]
+
+def p_cpath(p):
+	'''cpath : branchexpr'''
 	p[0] = p[1]
 
-def p_prefixedname_prefix_name(p):
-	'prefixedname : prefix NAME'
-	p[0] = "%s%s" % (p[1], p[2])
-
-def p_prefixedname_name(p):
-	'prefixedname : NAME'
+def p_branchexpr(p):
+	'''branchexpr : name
+				  | STAR'''
 	p[0] = p[1]
+
+def p_branchexpr_paren(p):
+	'''branchexpr : name paren
+				  | STAR paren'''
+	p[0] = p[1] + p[2]
 
 def p_equation(p):
-	'equation : prefixedname EQUAL NAME'
-	p[0] = "%s=%s" % (p[1], p[3])
-
-def p_queryexprunit(p):
-	'''queryexprunit : prefixedname
-					 | equation'''
-	p[0] = p[1]
-
-def p_inparen_operator(p):
-	'''inparen : queryexprunit AND queryexprunit
-			   | queryexprunit OR queryexprunit'''
-	if p[2] == "and":
-		p[0] = "%s and %s" % (p[1], p[3])
-	elif p[2] == "or":
-		p[0] = "%s or %s" % (p[1], p[3])
-
-def p_inparen_queryexprunit(p):
-	'inparen : queryexprunit'
-	p[0] = p[1]
+	'''equation : name EQUAL WORD
+				| cpath EQUAL WORD'''
+	p[0] = p[1] + "=" + p[3]
 
 def p_paren(p):
-	'paren  : LPAREN inparen RPAREN'
-	p[0] = "(%s)" % p[2]
+	'''paren : LPAREN inparen RPAREN'''
+	p[0] = "(" + p[2] + ")"
 
-def p_branchexpression(p):
-	'''branchexpression : prefixedname
-					    | paren'''
+def p_inparen_cpath(p):
+	'''inparen : cpath'''
 	p[0] = p[1]
 
-def p_branchexpression_prefixedname_paren(p):
-	'branchexpression : prefixedname paren'
-	p[0] = "%s%s" % (p[1], p[2])
+def p_inparen(p):
+	'''inparen : cpath andor cpath'''
+	p[0] = p[1] + " "  + p[2] + " " + p[3]
 
-def p_cpath_dot_branchexpr(p):
-	'cpath : cpath DOT branchexpression'
-	p[0] = "$s.%s" % (p[1], p[2])
-
-def p_cpath_branchexpr(p):
-	'cpath : branchexpression'
+def p_name(p):
+	'''name : WORD
+			| type
+			| label'''
 	p[0] = p[1]
+
+def p_type(p):
+	'''type : LABELPREFIX WORD'''
+	p[0] = "_" + p[2]
+
+def p_label(p):
+	'''label : TYPEPREFIX WORD'''
+	p[0] = "__" + p[2]
+
+def p_andor(p):
+	'''andor : AND
+			 | OR'''
+	p[0]= p[1]
 
 # Error rule for syntax errors
 def p_error(p):
 	print "Syntax error in input!"
 
-#testCPath = "test.(deneme)"
-testCPath = "_basic._views.__view(_name=hede and _type=1).*.__type"
+#testCPath = "test.hede"
+testCPath = "_test.__de(__deneme._hop and _hoppa.heblek).hede"
+#testCPath = "_basic._views.__view(_name=hede and _type=1).*.__type"
 
 # lexical analyzer
-lex.lex(debug=1)
+lex.lex(debug=0)
 #test(testCPath)
 
 # Build the parser
