@@ -2,6 +2,8 @@
 import ply.lex as lex
 import ply.yacc as yacc
 
+class ParseError(Exception): pass
+
 # FIXME: Not working
 tokens = (
 	'DOT',				# .
@@ -35,7 +37,7 @@ def t_WORD(t):
 
 def t_error(t):
 	print "Illegal char '%s'" % t.value
-	lex.skip(1)
+	raise ParseError, "CPath is not valid!"
 
 def test(data):
 	lex.input(data)
@@ -97,22 +99,26 @@ def p_branchexpr_paren(p):
 				  | STAR paren'''
 	p[0] = p[1] + p[2]
 
-def p_equation(p):
-	'''equation : name EQUAL WORD
-				| cpath EQUAL WORD'''
-	p[0] = p[1] + "=" + p[3]
-
 def p_paren(p):
 	'''paren : LPAREN inparen RPAREN'''
 	p[0] = "(" + p[2] + ")"
 
-def p_inparen_cpath(p):
-	'''inparen : cpath'''
+def p_inparen(p):
+	'''inparen : equationa'''
 	p[0] = p[1]
 
-def p_inparen(p):
-	'''inparen : cpath andor cpath'''
+def p_inparen_operatored(p):
+	'''inparen : equationa operator equationa'''
 	p[0] = p[1] + " "  + p[2] + " " + p[3]
+
+def p_equation_a(p):
+	'''equationa : equation
+				 | cpath'''
+	p[0] = p[1]
+
+def p_equation(p):
+	'''equation : cpath EQUAL cpath'''
+	p[0] = p[1] + "=" + p[3]
 
 def p_name(p):
 	'''name : WORD
@@ -128,8 +134,8 @@ def p_label(p):
 	'''label : TYPEPREFIX WORD'''
 	p[0] = "__" + p[2]
 
-def p_andor(p):
-	'''andor : AND
+def p_operator(p):
+	'''operator : AND
 			 | OR'''
 	p[0]= p[1]
 
@@ -138,7 +144,7 @@ def p_error(p):
 	print "Syntax error in input!"
 
 #testCPath = "test.hede"
-testCPath = "_test.__de(__deneme._hop and _hoppa.heblek).hede"
+testCPath = "_test.__de(__deneme._h=op and _hoppa.heb=lek).hede"
 #testCPath = "_basic._views.__view(_name=hede and _type=1).*.__type"
 
 # lexical analyzer
