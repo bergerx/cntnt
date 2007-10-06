@@ -1,0 +1,2 @@
+* Remove version columns, they are unnecessary
+* "order" column not used, so we donk keep the order between siblings

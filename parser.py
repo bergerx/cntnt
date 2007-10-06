@@ -92,39 +92,42 @@ def p_name(p):
 			| label'''
 	p[0] = p[1]
 
-def p_type(p):
+def p_label(p):
 	'''type : LABELPREFIX WORD'''
 	p[0] = "_" + p[2]
 
-def p_label(p):
+def p_type(p):
 	'''label : TYPEPREFIX WORD'''
 	p[0] = "__" + p[2]
 
 def p_operator(p):
 	'''operator : AND
-			 | OR'''
+				| OR'''
 	p[0]= p[1]
 
 # Error rule for syntax errors
 def p_error(p):
-	print "Syntax error in input!"
+	raise ParseError, "Syntax error in input!"
 
 #testCPath = "test.hede"
 #testCPath = "_test.__de(__deneme._h=op and _hoppa.heb=lek).hede"
-testCPath = "_basic._views.__view(_name.__type=query and _type=1).*.__type"
+testCPath = "_basic._views.__view(_name=query and __type=string)._type"
+#testCPath = "_basic._views.__view[2]._type" # not supported
 #testCPath = "_basic._views.__view(_name=hede and _type=1).*.__type"
 
+debug=0
+
 # lexical analyzer
-lex.lex(debug=0)
+lex.lex(debug=debug)
 #lextest(testCPath)
 
 # Build the parser
-yacc.yacc(debug=1)
+yacc.yacc(debug=debug)
 
 # Use this if you want to build the parser using SLR instead of LALR
 #yacc.yacc(method="SLR")
 
 try:
-	print yacc.parse(testCPath, debug=1)
+	print yacc.parse(testCPath, debug=debug)
 except:
 	raise ParseError, "CPath does not look valid!"

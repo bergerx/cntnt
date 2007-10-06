@@ -67,7 +67,7 @@ class cntnt:
 								 ["type", "1", "text"]],
 						 strict=True)
 			self.createType("fields",
-						 fields=[["types", "*", "field"]],
+						 fields=[["type", "*", "field"]],
 						 strict=True)
 			self.createType("type",
 						 fields=[["name", "1", "text"],
@@ -75,7 +75,7 @@ class cntnt:
 								 ["fields", "?", "fields"]],
 						 strict=True)
 			self.createType("types",
-						 fields=[["types", "1", "types"]],
+						 fields=[["type", "*", "type"]],
 						 strict=True)
 
 	def commit(self):
@@ -152,7 +152,6 @@ class cntnt:
 	def create(self, parent, content="", type="", label="", id=None):
 		# TODO: If declared a "label" for parent's type definition for
 		# this type of content use that label as default.
-
 		# Do creation parameter checks, raises exception on parameter
 		# errors
 		self.checkForCreate(type=type, parent=parent, label=label, id=id)
@@ -191,7 +190,6 @@ class cntnt:
 	def deepDelete(self, id):
 		# FIXME: This function deletes pointer targets instead of
 		# pointer contetnts itself.
-
 		# We must use pointedFrom key from read contents.
 		ids = []
 		for child in self.readChilds(id):
@@ -262,6 +260,8 @@ class cntnt:
 		return parents
 
 	def createType(self, name, fields=[], extFrom="", strict=False):
+		# "fields" parameter must be in this format:
+		# [["name1", "count1", "type1"], ["name2", "count2", "type2"], ... ]
 		# Get id of Types branch
 		id = self.getCPath("_basic._types")[0]
 		# Create a new type record
@@ -280,6 +280,30 @@ class cntnt:
 			if count: self.create(parent=fieldid, content=count, type="text", label="count")
 			self.create(parent=fieldid, content=type, type="text", label="type")
 		return typeid
+
+	# TODO: FILL in these functions
+	def readType(self, name):
+		# TODO: Must read fields and also fields of "extFrom"s fields.
+		# TODO: returned object should include "ownerType" property
+		# for fields, which comes from extended field.
+		return self.getCPath('_basic._types.*._name.@%s._fields.__field' % name)
+
+	def deleteType(self, name):
+		# TODO: Must check contents which has "name" type
+		# Check if extended (by this type) types exists
+		pass
+
+	def checkStrict(self, id):
+		typename = self.read(id)["type"]
+		type = self.readType(typename)
+		strict = bool(type["strict"])
+		return strict
+
+	def checkContentTypeConsistency(self, contentid):
+		pass
+
+	def getTree(self,id):
+		pass
 
 # here after there is only command line functions
 def tree(cnt, id=0, level=0):
@@ -315,7 +339,6 @@ def main():
 	except getopt.GetoptError:
 		usage()
 		sys.exit(2)
-
 	content = ""
 	label = ""
 	type = ""
@@ -323,7 +346,6 @@ def main():
 	crud = None
 	id = 0
 	path = ""
-
 	for o, a in opts:
 		if o in ("-h", "--help"):
 			usage()
@@ -342,7 +364,6 @@ def main():
 		if o == "--type": type = str(a)
 		if o == "--parent": parent = int(a)
 		if o == "--path": path = str(a)
-
 	if crud == "create":
 		if "" in (content, type, parent):
 			print "You must supply --content, --type and --parent"
